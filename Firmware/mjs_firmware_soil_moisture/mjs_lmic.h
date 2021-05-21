@@ -78,7 +78,7 @@ void onEvent (ev_t ev) {
       case EV_JOINING:
         // Let join start at SF9, since that's what we'll be using for
         // transmission anyway
-        LMIC_setDrTxpow(DR_SF9, 14);
+        LMIC_setDrTxpow(DR_SF9, 14); //DR_SF9
         Serial.println(F("EV_JOINING"));
         break;
       case EV_JOINED:

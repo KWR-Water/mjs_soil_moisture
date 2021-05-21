@@ -47,7 +47,8 @@ float const BATTERY_DIVIDER_RATIO = 0.0;
 //#define WITH_LUX
 
 // Enable this define when a soil moisture sensor is attached
-#define WITH_SM;
+//#define WITH_SM;
+#define WITH_SM_KWR;
 
 // These values define the sensitivity and calibration of the PAR / Lux
 // measurement.
@@ -78,7 +79,7 @@ float const reference_voltage_internal = 1137.0;
 uint8_t const GPS_PIN = 8;
 
 // Sensor object
-HTU21D htu;
+//HTU21D htu;
 
 // Most recently read values
 float temperature;
@@ -89,6 +90,10 @@ float humidity;
 const int levels=6;
 uint16_t l[levels];
 uint8_t t[levels];
+#endif
+
+#ifdef WITH_SM_KWR
+uint16_t soil_moisture;
 #endif
 
 uint16_t vcc = 0;
@@ -103,16 +108,18 @@ int32_t lng24 = 0;
 uint8_t const SW_GND_PIN = 20;
 uint8_t const LED_PIN = 21;
 uint8_t const LUX_HIGH_PIN = 5;
+uint8_t const SOIL_MOIST_ANAL_PIN = A0;
 
 // setup timing variables
-uint32_t const UPDATE_INTERVAL = 1800000; //30m
+uint32_t UPDATE_INTERVAL = 3600000; //60m
 uint32_t const GPS_TIMEOUT = 120000; //2m
 uint32_t const WIRE_TIMEOUT = 1000000; //microseconds
 uint32_t const SWG_GND_DELAY=2000; //milliseconds
 uint32_t const SOIL_DELAY=10000; //milliseconds
+uint32_t const SOIL_DELAY_KWR=2000; //milliseconds
 
 // Update GPS position after transmitting this many updates
-uint16_t const GPS_UPDATE_RATIO = 24*4;
+uint16_t const GPS_UPDATE_RATIO = 24;
 
 // When sending extra data, use this many bits to specify the size
 // (allows up to 32-bit values)
@@ -137,6 +144,7 @@ void setup() {
   // when in debugging mode start serial connection
   if(DEBUG) {
     Serial.begin(9600);
+    UPDATE_INTERVAL = 60000; 
   }
 
   // setup LoRa transceiver
@@ -146,9 +154,13 @@ void setup() {
   pinMode(SW_GND_PIN, OUTPUT);
   digitalWrite(SW_GND_PIN, LOW);
 
+  // Set analogue pin to read
+  pinMode(SOIL_MOIST_ANAL_PIN, OUTPUT);
+
   // This pin can be used in OUTPUT LOW mode to add an extra pulldown
   // resistor, or in INPUT mode to keep it disconnected
   pinMode(LUX_HIGH_PIN, INPUT);
+  pinMode(SOIL_MOIST_ANAL_PIN, INPUT);
 
   // blink 'hello'
   pinMode(LED_PIN, OUTPUT);
@@ -180,9 +192,9 @@ void loop() {
   delay(SWG_GND_DELAY); //time for sensor to start-up
   
   // Activate and read our sensorss
-  htu.begin(); //includes a wire.begin in the sparfun library moved here from setup
-  temperature = htu.readTemperature();
-  humidity = htu.readHumidity();
+//  htu.begin(); //includes a wire.begin in the sparfun library moved here from setup
+  temperature = 0; // htu.readTemperature();
+  humidity = 0; // htu.readHumidity();
   vcc = readVcc();
 
 #ifdef WITH_SM
@@ -194,6 +206,11 @@ void loop() {
   EndSoilMoisture();
 
 #endif // WITH_SM
+#ifdef WITH_SM_KWR
+  
+  readSoilMoistureKWR();
+
+#endif // WITH_SM_KWR
 
   //switch ground pin off  
   digitalWrite(SW_GND_PIN, LOW); 
@@ -287,6 +304,11 @@ void dumpData() {
   Serial.print(F(", v="));
   Serial.print(vcc, 1);
 
+#ifdef WITH_SM_KWR
+  Serial.print(F(", soil moisture="));
+  Serial.print(soil_moisture);
+#endif // WITH_SM_KWR
+
 #ifdef WITH_LUX
   Serial.print(F(", lux="));
   Serial.print(lux);
@@ -363,8 +385,15 @@ void queueData() {
   // uncomment a bit of code further down that actually adds the data to
   // the packet, and also shows how the number of bits is counted.
 
+#ifdef WITH_SM
   const uint8_t extra_bits = 6*(EXTRA_SIZE_BITS+16)+6*(EXTRA_SIZE_BITS+8);
   length += (extra_bits + 7)/8;
+#endif
+
+#ifdef WITH_SM_KWR
+  const uint8_t extra_bits = EXTRA_SIZE_BITS+16;
+  length += (extra_bits + 7)/8;
+#endif
   flags |= FLAG_WITH_EXTRA;
 
   uint8_t data[length];
@@ -414,6 +443,7 @@ void queueData() {
   
   // This uses some random values, replace these variables by your values.
 
+#ifdef WITH_SM
   // Capacity values 
   for (int i=0;i<levels;i++){
       packet.append(16-1, EXTRA_SIZE_BITS);
@@ -421,6 +451,12 @@ void queueData() {
       packet.append(8-1, EXTRA_SIZE_BITS);
       packet.append(t[i], 8);
   }
+#endif
+#ifdef WITH_SM_KWR
+  // analogue read out
+  packet.append(16-1, EXTRA_SIZE_BITS);
+  packet.append(soil_moisture, 16);
+#endif
   
   // Fill any remaining bits (from rounding up to whole bytes) with 1's,
   // so they cannot be a valid field.
@@ -624,6 +660,36 @@ void readSoilMoisture(int lev){
     Serial.print(l[lev]);
     Serial.print(F("\n"));  
   }
+
+}
+
+#endif
+
+#ifdef WITH_SM_KWR
+
+void readSoilMoistureKWR(){
+//  analogReference(INTERNAL);
+
+  // Wait for the sensor to achive stable signal
+  delay(SOIL_DELAY_KWR);
+    
+  // read analog out x times and average the value
+  uint8_t number_for_average = 1;
+  soil_moisture = analogRead(SOIL_MOIST_ANAL_PIN);
+  for (int i=0;i<number_for_average-1;i++){ 
+    if(DEBUG) {
+      Serial.print("soil_moisture: ");
+      Serial.println(soil_moisture);
+    }
+
+    delay(500);
+    soil_moisture += analogRead(SOIL_MOIST_ANAL_PIN);
+    if(DEBUG) {
+      Serial.println(soil_moisture);
+    }
+  }
+
+  soil_moisture /= number_for_average;
 
 }
 
