@@ -25,7 +25,7 @@
 #include <avr/power.h>
 #include <util/atomic.h>
 
-#define DEBUG true
+#define DEBUG false
 #include "bitstream.h"
 #include "mjs_lmic.h"
 
@@ -116,10 +116,10 @@ uint32_t const GPS_TIMEOUT = 120000; //2m
 uint32_t const WIRE_TIMEOUT = 1000000; //microseconds
 uint32_t const SWG_GND_DELAY=2000; //milliseconds
 uint32_t const SOIL_DELAY=10000; //milliseconds
-uint32_t const SOIL_DELAY_KWR=2000; //milliseconds
+uint32_t const SOIL_DELAY_KWR=200; //milliseconds
 
 // Update GPS position after transmitting this many updates
-uint16_t const GPS_UPDATE_RATIO = 24;
+uint16_t const GPS_UPDATE_RATIO = 12;
 
 // When sending extra data, use this many bits to specify the size
 // (allows up to 32-bit values)
@@ -467,6 +467,8 @@ void queueData() {
   if (DEBUG)
   {
     Serial.println(F("Packet queued"));
+    Serial.print(F("Packet byte size: "));
+    Serial.println(packet.byte_size());
     uint8_t *data = packet.data();
     for (int i = 0; i < packet.byte_size(); i++)
     {
@@ -674,7 +676,7 @@ void readSoilMoistureKWR(){
   delay(SOIL_DELAY_KWR);
     
   // read analog out x times and average the value
-  uint8_t number_for_average = 1;
+  uint8_t number_for_average = 10;
   soil_moisture = analogRead(SOIL_MOIST_ANAL_PIN);
   for (int i=0;i<number_for_average-1;i++){ 
     if(DEBUG) {
